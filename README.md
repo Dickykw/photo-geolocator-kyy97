@@ -16,26 +16,41 @@ hand-reasoned climate rules, each naming a regional anchor:
 
 | Scene | Anchor |
 |---|---|
-| lush green + warm + bright | humid tropics, SE Asia (8, 100) |
-| lush green, cooler / dimmer | equatorial, Africa / N South America (0, 25) |
-| overcast grey sky, dim | boreal north, Russia / N Europe (55, 40) |
+| lush green + warm + bright | humid tropics, South / SE Asia (23, 85) |
+| lush green, cooler / dimmer | temperate green, N Atlantic (7.5, 25) |
+| overcast grey sky, dim | boreal north (47.5, 62.5) |
 | low saturation + cool | temperate Europe (50, 10) |
-| bright, dry, almost no green | arid, Middle East / N Africa (30, 45) |
-| anything else | the populated world's centre (25, 0) |
+| bright, dry, almost no green | arid Americas / dry subtropics (33.75, -45) |
+| no green at ground level | paved / bare northern Eurasia (55.2, 40.8) |
+| anything else | north-Atlantic compromise (36.25, -15) |
 
 No network except the trial env itself; no model call; deterministic:
 every answer is a function of the photo's bytes and these fixed rules.
 Standard library only (Python 3.13).
 
+## v2 calibration
+
+The anchors are the practice-calibrated compromise points for the photo
+source's own distribution (OpenStreetView-5M, which is northern-heavy),
+shrunk 25% back toward the v1 hand-picked anchors so no single practice
+trial's mix dominates. The no-green-ground rule is the one split that
+held up under leave-one-trial-out validation on all three practice
+trials: photos with essentially no green in the lower third of the frame
+(paved road, bare ground, no roadside grass) sit in northern Eurasia far
+more often than anywhere else. Two further splits that looked good
+in-sample (very green temperate photos, very blue sky) failed the same
+validation and were left out.
+
 ## Practice scores (official scorer)
 
-| Trial | Score | Total error |
-|---|---|---|
-| trial-0 | 281,793 | 218,584 km |
-| trial-1 | 313,807 | 186,570 km |
-| trial-2 | 340,477 | 159,900 km |
+| Trial | Score | Total error | Median |
+|---|---|---|---|
+| trial-0 | 298,077 | 202,300 km | 7,585 km |
+| trial-1 | 338,736 | 161,641 km | 6,239 km |
+| trial-2 | 385,062 | 115,315 km | 4,562 km |
 
-Each trial answers all 25 photos in about 9 seconds.
+Mean score 340,625 (v1: 312,026). Each trial answers all 25 photos in
+about 13 seconds.
 
 ## Run
 

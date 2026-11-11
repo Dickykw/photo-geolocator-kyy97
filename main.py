@@ -11,12 +11,22 @@ without any model, weight, embedding or table of photos.
 From that colour map the entry computes a few scene features and applies
 hand-reasoned climate rules, each naming a regional anchor:
 
-  * lush green + warm + bright  -> humid tropics (SE Asia)
-  * lush green, cooler/dimmer   -> equatorial (Africa / N South America)
-  * overcast grey sky, dim      -> boreal north (Russia / N Europe)
-  * low saturation + cool       -> temperate Europe
-  * bright, dry, almost no green-> arid (Middle East / N Africa)
-  * anything else               -> the populated world's centre (25, 0)
+  * lush green + warm + bright  -> humid tropics, South / SE Asia
+  * lush green, cooler/dimmer   -> temperate green, N Atlantic (7.5, 25)
+  * overcast grey sky, dim      -> boreal north (47.5, 62.5)
+  * low saturation + cool       -> temperate Europe (50, 10)
+  * bright, dry, almost no green-> arid Americas / dry subtropics (33.75, -45)
+  * no green at ground level    -> paved/bare northern Eurasia (55.2, 40.8)
+  * anything else               -> north-Atlantic compromise (36.25, -15)
+
+v2 calibration: the anchors are the practice-calibrated compromise points
+for the photo source's own distribution (OpenStreetView-5M, which is
+northern-heavy), shrunk 25% back toward the v1 hand-picked anchors so no
+single trial's mix dominates. The no-green-ground rule is the one split
+that held up under leave-one-trial-out validation on all three practice
+trials: photos with essentially no green in the lower third of the frame
+(paved road, bare ground, no roadside grass) sit in northern Eurasia far
+more often than anywhere else.
 
 No network except the trial env itself; no model call; deterministic:
 every answer is a function of the photo's bytes and these fixed rules.
@@ -309,12 +319,15 @@ def features(cols, rows, rgb):
     sky_lum = (0.299 * mean_chan(0, 6, 0) + 0.587 * mean_chan(0, 6, 1)
                + 0.114 * mean_chan(0, 6, 2))
     green = 0
+    green_gnd = 0
     warmth = 0.0
     bright = 0.0
     sat = 0.0
-    for (r, g, b) in small:
+    for idx, (r, g, b) in enumerate(small):
         if g > r + 8 and g > b + 8:
             green += 1
+            if idx >= 12 * W:
+                green_gnd += 1
         warmth += r - b
         bright += 0.299 * r + 0.587 * g + 0.114 * b
         sat += max(r, g, b) - min(r, g, b)
@@ -323,6 +336,7 @@ def features(cols, rows, rgb):
         "sky_blue": sky_b,
         "sky_lum": sky_lum,
         "green": green / n,
+        "green_gnd": green_gnd / (6.0 * W),
         "gnd_r": mean_chan(12, 18, 0),
         "warmth": warmth / n,
         "bright": bright / n,
@@ -332,13 +346,16 @@ def features(cols, rows, rgb):
 
 # ------------------------------------------------------------ classifier --
 
-# Regional anchors (lat, lon): population/photo-density-weighted centres.
-MEAN = (25.0, 0.0)          # populated world's centre (fallback)
-TROP_ASIA = (8.0, 100.0)    # humid tropics, SE Asia
-TROP_EQ = (0.0, 25.0)       # equatorial, Africa / N South America
-BOREAL = (55.0, 40.0)       # boreal north, Russia / N Europe
+# Regional anchors (lat, lon): practice-calibrated compromise points for
+# the photo source's distribution, shrunk 25% toward the v1 hand-picked
+# anchors so no single practice trial's mix dominates the choice.
+MEAN = (36.25, -15.0)       # north-Atlantic compromise (fallback)
+NOGREEN = (55.2, 40.8)      # paved/bare northern Eurasia
+TROP_ASIA = (23.0, 85.0)    # humid tropics, South / SE Asia
+TROP_EQ = (7.5, 25.0)       # temperate green, N Atlantic
+BOREAL = (47.5, 62.5)       # boreal north, Russia / N Europe
 EUROPE = (50.0, 10.0)       # temperate Europe
-ARID = (30.0, 45.0)         # arid, Middle East / N Africa
+ARID = (33.75, -45.0)       # arid Americas / dry subtropics
 
 
 def classify(f):
@@ -350,12 +367,14 @@ def classify(f):
         return TROP_ASIA
     if green > 0.18:
         return TROP_EQ
-    if f["sky_blue"] < 10 and bright < 105:
+    if f["sky_blue"] < 10 and bright < 115:
         return BOREAL
     if f["sat"] < 20 and warmth < -25:
         return EUROPE
-    if f["gnd_r"] > 150 and green < 0.05:
+    if f["gnd_r"] > 135 and green < 0.05:
         return ARID
+    if f["green_gnd"] < 0.01:
+        return NOGREEN
     return MEAN
 
 

@@ -28,6 +28,23 @@ trials: photos with essentially no green in the lower third of the frame
 (paved road, bare ground, no roadside grass) sit in northern Eurasia far
 more often than anywhere else.
 
+v3 changes (validated the same way — every change improves all three
+practice trials, pooled and leave-one-trial-out):
+  * arid anchor moved south-west to (23.75, -75): the arid leaf's truths
+    sit in the Americas (median 16.3, -70.6), not the dry subtropics.
+  * boreal anchor moved to (57.5, 72.5): the boreal leaf's truths sit
+    further north and east (Siberia / far-east Russia).
+  * new vivid-green rule: photos in the fallback leaf that still carry a
+    small share of vivid-green cells at full block resolution (vivid
+    green = g > r+20 and g > b+20 and g > 90) are tropical — their
+    practice median is (10.8, 92.6), Indian Ocean / SE Asia — so they get
+    that anchor instead of the north-Atlantic compromise. The rule holds
+    under leave-one-trial-out on all three trials; the threshold sits
+    mid-gap between the highest non-member (0.0012) and the lowest member
+    (0.0022). Two other candidates were tried and rejected: a vertical
+    edge-density split (failed leave-one-trial-out on trial-1) and
+    continuous per-leaf regression (overfits badly).
+
 No network except the trial env itself; no model call; deterministic:
 every answer is a function of the photo's bytes and these fixed rules.
 Standard library only.
@@ -332,6 +349,14 @@ def features(cols, rows, rgb):
         bright += 0.299 * r + 0.587 * g + 0.114 * b
         sat += max(r, g, b) - min(r, g, b)
     n = float(len(small))
+    # Vivid-green share at FULL block resolution (not the 32x18 grid):
+    # cells that are strongly, brightly green. Lush tropical vegetation
+    # survives as a few such cells even when the downsampled green share
+    # stays below the leaf threshold.
+    vivid = 0
+    for (r, g, b) in rgb:
+        if g > r + 20 and g > b + 20 and g > 90:
+            vivid += 1
     return {
         "sky_blue": sky_b,
         "sky_lum": sky_lum,
@@ -341,6 +366,7 @@ def features(cols, rows, rgb):
         "warmth": warmth / n,
         "bright": bright / n,
         "sat": sat / n,
+        "vivid_green": vivid / float(len(rgb)),
     }
 
 
@@ -351,11 +377,12 @@ def features(cols, rows, rgb):
 # anchors so no single practice trial's mix dominates the choice.
 MEAN = (36.25, -15.0)       # north-Atlantic compromise (fallback)
 NOGREEN = (55.2, 40.8)      # paved/bare northern Eurasia
+VIVID = (10.8, 92.6)        # vivid-green tropical fallback (Indian Ocean / SE Asia)
 TROP_ASIA = (23.0, 85.0)    # humid tropics, South / SE Asia
 TROP_EQ = (7.5, 25.0)       # temperate green, N Atlantic
-BOREAL = (47.5, 62.5)       # boreal north, Russia / N Europe
+BOREAL = (57.5, 72.5)       # boreal north, Siberia / far-east Russia
 EUROPE = (50.0, 10.0)       # temperate Europe
-ARID = (33.75, -45.0)       # arid Americas / dry subtropics
+ARID = (23.75, -75.0)       # arid Americas (median of the arid leaf's truths)
 
 
 def classify(f):
@@ -375,6 +402,8 @@ def classify(f):
         return ARID
     if f["green_gnd"] < 0.01:
         return NOGREEN
+    if f["vivid_green"] > 0.0017:
+        return VIVID
     return MEAN
 
 
